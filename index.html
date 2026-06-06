@@ -2062,22 +2062,34 @@ saveState = function(){
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify({income:state.income,expenses:state.expenses,budget:state.budget,usedCategories:state.usedCategories,planItems:state.planItems,debts:state.debts,diario:state.diario||{}}));}catch(e){}
 };
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
-function init(){
-    loadState();updateDateDisplay();
-    if(!state.diario)state.diario={};
-    const q=getCurrentQ();state.currentQ=q;state.planCurrentQ=q;
-    document.querySelectorAll('#qTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
-    document.querySelectorAll('#planQTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
-    updateUI();
-    // Firebase + Auth
-    initFirebase();
-    setupAuthUI();
+
+// ── MOBILE NUMERIC INPUT FIX ──────────────────────────────────
+// En móvil, inputmode="decimal" con type="text" a veces no permite
+// borrar correctamente. Este handler lo soluciona.
+function fixMobileNumericInputs(){
+    const numericIds=[
+        'incomeInput','amountInput','planAmtInp','debtAmtInp',
+        'editDebtAmt','editDebtPaid','editPlanAmt','diarioInitInp',
+        'diarioIngAmt','dAmountInput','budgetInput'
+    ];
+    numericIds.forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el)return;
+        // Cambiar a type="tel" en móvil para mejor compatibilidad con backspace
+        // type="tel" muestra teclado numérico y permite backspace en todos los móviles
+        el.setAttribute('type','tel');
+        el.setAttribute('inputmode','decimal');
+        // Filtrar solo números y punto decimal
+        el.addEventListener('input',function(){
+            let val=this.value.replace(/[^0-9.]/g,'');
+            // Solo un punto decimal
+            const parts=val.split('.');
+            if(parts.length>2)val=parts[0]+'.'+parts.slice(1).join('');
+            // No actualizar si el valor es el mismo (evita loop)
+            if(this.value!==val)this.value=val;
+        });
+    });
 }
-init();
-</script>
-</body>
-</html>
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function init(){
@@ -2090,6 +2102,54 @@ function init(){
     // Firebase + Auth
     initFirebase();
     setupAuthUI();
+    fixMobileNumericInputs();
+}
+init();
+</script>
+</body>
+</html>
+
+
+// ── MOBILE NUMERIC INPUT FIX ──────────────────────────────────
+// En móvil, inputmode="decimal" con type="text" a veces no permite
+// borrar correctamente. Este handler lo soluciona.
+function fixMobileNumericInputs(){
+    const numericIds=[
+        'incomeInput','amountInput','planAmtInp','debtAmtInp',
+        'editDebtAmt','editDebtPaid','editPlanAmt','diarioInitInp',
+        'diarioIngAmt','dAmountInput','budgetInput'
+    ];
+    numericIds.forEach(id=>{
+        const el=document.getElementById(id);
+        if(!el)return;
+        // Cambiar a type="tel" en móvil para mejor compatibilidad con backspace
+        // type="tel" muestra teclado numérico y permite backspace en todos los móviles
+        el.setAttribute('type','tel');
+        el.setAttribute('inputmode','decimal');
+        // Filtrar solo números y punto decimal
+        el.addEventListener('input',function(){
+            let val=this.value.replace(/[^0-9.]/g,'');
+            // Solo un punto decimal
+            const parts=val.split('.');
+            if(parts.length>2)val=parts[0]+'.'+parts.slice(1).join('');
+            // No actualizar si el valor es el mismo (evita loop)
+            if(this.value!==val)this.value=val;
+        });
+    });
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function init(){
+    loadState();updateDateDisplay();
+    if(!state.diario)state.diario={};
+    const q=getCurrentQ();state.currentQ=q;state.planCurrentQ=q;
+    document.querySelectorAll('#qTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
+    document.querySelectorAll('#planQTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
+    updateUI();
+    // Firebase + Auth
+    initFirebase();
+    setupAuthUI();
+    fixMobileNumericInputs();
 }
 init();
 </script>

@@ -859,52 +859,55 @@
     </div>
 
 
-    <!-- ═══════════════ LOGIN PIN ═══════════════ -->
+    <!-- ═══════════════ LOGIN / REGISTRO ═══════════════ -->
     <div class="login-overlay" id="loginOverlay">
         <div class="login-card">
             <div class="login-logo">💰</div>
             <div class="login-title">Mis Finanzas</div>
-            <div class="login-subtitle">Selecciona tu perfil e ingresa tu PIN</div>
+            <div class="login-subtitle" id="authSubtitle">Controla tus gastos desde cualquier dispositivo</div>
 
-            <!-- Selector de usuario -->
-            <div class="login-user-sel" id="loginUserSel">
-                <button class="login-user-btn active" data-user="user1" id="btnUser1">
-                    <span class="login-user-icon">👤</span>Usuario 1
-                </button>
-                <button class="login-user-btn" data-user="user2" id="btnUser2">
-                    <span class="login-user-icon">👤</span>Usuario 2
-                </button>
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Iniciar sesión</button>
+                <button class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">Crear cuenta</button>
             </div>
 
-            <div class="pin-label" id="pinLabel">Ingresa tu PIN</div>
-            <div class="pin-dots" id="pinDots">
-                <div class="pin-dot" id="pd0"></div>
-                <div class="pin-dot" id="pd1"></div>
-                <div class="pin-dot" id="pd2"></div>
-                <div class="pin-dot" id="pd3"></div>
+            <div id="authLoginForm">
+                <div class="auth-field-wrap">
+                    <label>Correo electrónico</label>
+                    <input type="email" class="auth-field" id="loginEmail" placeholder="tu@correo.com">
+                </div>
+                <div class="auth-field-wrap">
+                    <label>Contraseña</label>
+                    <input type="password" class="auth-field" id="loginPassword" placeholder="Tu contraseña">
+                </div>
+                <button class="btn-auth" id="btnLogin">Iniciar sesión</button>
+                <button class="auth-forgot" id="btnForgot">¿Olvidaste tu contraseña? Recuperar</button>
             </div>
 
-            <div class="pin-keypad">
-                <button class="pin-key" data-n="1">1</button>
-                <button class="pin-key" data-n="2">2</button>
-                <button class="pin-key" data-n="3">3</button>
-                <button class="pin-key" data-n="4">4</button>
-                <button class="pin-key" data-n="5">5</button>
-                <button class="pin-key" data-n="6">6</button>
-                <button class="pin-key" data-n="7">7</button>
-                <button class="pin-key" data-n="8">8</button>
-                <button class="pin-key" data-n="9">9</button>
-                <button class="pin-key del" data-n="del">⌫</button>
-                <button class="pin-key zero" data-n="0">0</button>
+            <div id="authRegisterForm" class="hidden">
+                <div class="auth-field-wrap">
+                    <label>Nombre</label>
+                    <input type="text" class="auth-field" id="registerName" placeholder="¿Cómo te llamas?">
+                </div>
+                <div class="auth-field-wrap">
+                    <label>Correo electrónico</label>
+                    <input type="email" class="auth-field" id="registerEmail" placeholder="tu@correo.com">
+                </div>
+                <div class="auth-field-wrap">
+                    <label>Contraseña (mínimo 6 caracteres)</label>
+                    <input type="password" class="auth-field" id="registerPassword" placeholder="Crea una contraseña segura">
+                </div>
+                <button class="btn-auth" id="btnRegister">Crear mi cuenta</button>
             </div>
-            <div class="pin-error" id="pinError"></div>
-            <button class="login-mode-toggle" id="pinModeToggle">¿Primera vez? Crear PIN</button>
+
+            <div class="auth-error hidden" id="authError"></div>
+            <div class="auth-success hidden" id="authSuccess"></div>
         </div>
     </div>
 
     <!-- Badge usuario activo -->
     <div class="user-badge hidden" id="userBadge" onclick="logoutUser()">
-        <span id="userBadgeLabel">👤</span> Cerrar sesión
+        <span>👤</span><span class="user-badge-email" id="userBadgeLabel">—</span><span>· Salir</span>
     </div>
 
     <!-- Indicador de sincronización -->
@@ -1824,7 +1827,7 @@ function closeDCatDropdown(){dCatDrop.classList.remove('open');}
 
 
 // ════════════════════════════════════════════════════════════════
-//  FIREBASE + LOGIN PIN
+//  FIREBASE + AUTH (correo/contraseña)
 // ════════════════════════════════════════════════════════════════
 const FB_CONFIG = {
     apiKey: "AIzaSyC-DiFYNEk-G9JSjwMZWWq7NNXt_jChkkU",
@@ -1835,8 +1838,8 @@ const FB_CONFIG = {
     appId: "1:266655572334:web:6670bd298cbb2fe710a17f"
 };
 
-let fbApp=null, fbDb=null;
-let currentUser=null; // 'user1' | 'user2'
+let fbApp=null, fbDb=null, fbAuth=null;
+let currentUser=null;
 let syncTimeout=null;
 let unsubscribeSnapshot=null;
 
@@ -1844,128 +1847,124 @@ async function initFirebase(){
     try{
         const {initializeApp}=await import("https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js");
         const {getFirestore,doc,setDoc,getDoc,onSnapshot}=await import("https://www.gstatic.com/firebasejs/12.14.0/firebase-firestore.js");
+        const {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged,sendPasswordResetEmail,updateProfile}=await import("https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js");
         fbApp=initializeApp(FB_CONFIG);
         fbDb=getFirestore(fbApp);
-        window._fbDoc=doc; window._fbSet=setDoc; window._fbGet=getDoc; window._fbSnap=onSnapshot;
-        console.log('Firebase OK');
-    }catch(e){console.error('Firebase error:',e);}
-}
-
-// ── PIN LOGIC ─────────────────────────────────────────────────
-let pinMode='login'; // 'login' | 'create'
-let selectedUser='user1';
-let pinBuffer='';
-const PIN_STORAGE='mf_pins_v1';
-
-function getPins(){try{return JSON.parse(localStorage.getItem(PIN_STORAGE))||{};}catch(e){return {};}}
-function savePins(pins){localStorage.setItem(PIN_STORAGE,JSON.stringify(pins));}
-
-function setupLoginUI(){
-    // User selector
-    document.querySelectorAll('.login-user-btn').forEach(btn=>{
-        btn.addEventListener('click',()=>{
-            selectedUser=btn.dataset.user;
-            document.querySelectorAll('.login-user-btn').forEach(b=>b.classList.remove('active'));
-            btn.classList.add('active');
-            pinBuffer='';updatePinDots();
-            document.getElementById('pinError').textContent='';
-            const pins=getPins();
-            pinMode=pins[selectedUser]?'login':'create';
-            updatePinLabel();
+        fbAuth=getAuth(fbApp);
+        window._fb={doc,setDoc,getDoc,onSnapshot,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged,sendPasswordResetEmail,updateProfile};
+        // Escuchar estado de autenticación
+        onAuthStateChanged(fbAuth, async (user)=>{
+            if(user){
+                currentUser=user;
+                document.getElementById('loginOverlay').classList.add('hidden');
+                document.getElementById('userBadge').classList.remove('hidden');
+                document.getElementById('syncIndicator').classList.remove('hidden');
+                const displayName=user.displayName||user.email.split('@')[0];
+                document.getElementById('userBadgeLabel').textContent=displayName;
+                await loadUserData();
+                subscribeToChanges();
+                showToast('👋 Bienvenido, '+displayName);
+            } else {
+                currentUser=null;
+                document.getElementById('loginOverlay').classList.remove('hidden');
+                document.getElementById('userBadge').classList.add('hidden');
+                document.getElementById('syncIndicator').classList.add('hidden');
+                if(unsubscribeSnapshot){unsubscribeSnapshot();unsubscribeSnapshot=null;}
+            }
         });
-    });
-    // Keypad
-    document.querySelectorAll('.pin-key').forEach(key=>{
-        key.addEventListener('click',()=>{
-            const n=key.dataset.n;
-            if(n==='del'){pinBuffer=pinBuffer.slice(0,-1);}
-            else if(pinBuffer.length<4){pinBuffer+=n;}
-            updatePinDots();
-            if(pinBuffer.length===4)setTimeout(handlePinComplete,120);
-        });
-    });
-    // Toggle mode
-    document.getElementById('pinModeToggle').addEventListener('click',()=>{
-        pinMode=pinMode==='login'?'create':'login';
-        pinBuffer='';updatePinDots();
-        document.getElementById('pinError').textContent='';
-        updatePinLabel();
-    });
-    // Check initial state
-    const pins=getPins();
-    pinMode=pins[selectedUser]?'login':'create';
-    updatePinLabel();
+        console.log('Firebase Auth OK');
+    }catch(e){console.error('Firebase error:',e);showToast('⚠️ Error conectando con Firebase');}
 }
 
-function updatePinLabel(){
-    const pins=getPins();
-    const hasPin=pins[selectedUser];
-    if(pinMode==='create'){
-        document.getElementById('pinLabel').textContent='Crea tu PIN de 4 dígitos';
-        document.getElementById('pinModeToggle').textContent=hasPin?'Ya tengo PIN':'';
-        document.getElementById('pinModeToggle').style.display=hasPin?'block':'none';
-    } else {
-        document.getElementById('pinLabel').textContent='Ingresa tu PIN';
-        document.getElementById('pinModeToggle').textContent='¿Olvidaste tu PIN? Restablecer';
-        document.getElementById('pinModeToggle').style.display='block';
-    }
+// ── AUTH UI ───────────────────────────────────────────────────
+function switchAuthTab(tab){
+    document.getElementById('authLoginForm').classList.toggle('hidden', tab!=='login');
+    document.getElementById('authRegisterForm').classList.toggle('hidden', tab!=='register');
+    document.getElementById('tabLogin').classList.toggle('active', tab==='login');
+    document.getElementById('tabRegister').classList.toggle('active', tab==='register');
+    document.getElementById('authError').classList.add('hidden');
+    document.getElementById('authSuccess').classList.add('hidden');
 }
 
-function updatePinDots(){
-    for(let i=0;i<4;i++){
-        document.getElementById('pd'+i).classList.toggle('filled',i<pinBuffer.length);
-    }
+function showAuthError(msg){
+    const el=document.getElementById('authError');
+    el.textContent=msg;el.classList.remove('hidden');
+    document.getElementById('authSuccess').classList.add('hidden');
+}
+function showAuthSuccess(msg){
+    const el=document.getElementById('authSuccess');
+    el.textContent=msg;el.classList.remove('hidden');
+    document.getElementById('authError').classList.add('hidden');
 }
 
-function handlePinComplete(){
-    const pins=getPins();
-    if(pinMode==='create'){
-        pins[selectedUser]=pinBuffer;
-        savePins(pins);
-        pinBuffer='';updatePinDots();
-        document.getElementById('pinError').textContent='';
-        showToast('✅ PIN creado correctamente');
-        loginUser(selectedUser);
-    } else {
-        if(pins[selectedUser]===pinBuffer){
-            loginUser(selectedUser);
-        } else {
-            document.getElementById('pinError').textContent='PIN incorrecto, intenta de nuevo';
-            pinBuffer='';updatePinDots();
-            setTimeout(()=>document.getElementById('pinError').textContent='',2500);
+function getAuthErrorMsg(code){
+    const msgs={
+        'auth/user-not-found':'No existe una cuenta con ese correo',
+        'auth/wrong-password':'Contraseña incorrecta',
+        'auth/email-already-in-use':'Ya existe una cuenta con ese correo',
+        'auth/weak-password':'La contraseña debe tener al menos 6 caracteres',
+        'auth/invalid-email':'El correo no es válido',
+        'auth/too-many-requests':'Demasiados intentos. Intenta más tarde',
+        'auth/invalid-credential':'Correo o contraseña incorrectos',
+        'auth/network-request-failed':'Sin conexión a internet',
+    };
+    return msgs[code]||'Error: '+code;
+}
+
+function setupAuthUI(){
+    // Login
+    document.getElementById('btnLogin').addEventListener('click', async()=>{
+        const email=document.getElementById('loginEmail').value.trim();
+        const pass=document.getElementById('loginPassword').value;
+        if(!email||!pass){showAuthError('Completa todos los campos');return;}
+        const btn=document.getElementById('btnLogin');
+        btn.disabled=true;btn.textContent='Entrando...';
+        try{
+            await window._fb.signInWithEmailAndPassword(fbAuth,email,pass);
+        }catch(e){
+            showAuthError(getAuthErrorMsg(e.code));
+            btn.disabled=false;btn.textContent='Iniciar sesión';
         }
-    }
+    });
+    document.getElementById('loginPassword').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('btnLogin').click();});
+
+    // Registro
+    document.getElementById('btnRegister').addEventListener('click', async()=>{
+        const name=document.getElementById('registerName').value.trim();
+        const email=document.getElementById('registerEmail').value.trim();
+        const pass=document.getElementById('registerPassword').value;
+        if(!name||!email||!pass){showAuthError('Completa todos los campos');return;}
+        const btn=document.getElementById('btnRegister');
+        btn.disabled=true;btn.textContent='Creando cuenta...';
+        try{
+            const cred=await window._fb.createUserWithEmailAndPassword(fbAuth,email,pass);
+            await window._fb.updateProfile(cred.user,{displayName:name});
+            showAuthSuccess('✅ Cuenta creada. ¡Bienvenido, '+name+'!');
+        }catch(e){
+            showAuthError(getAuthErrorMsg(e.code));
+            btn.disabled=false;btn.textContent='Crear mi cuenta';
+        }
+    });
+
+    // Recuperar contraseña
+    document.getElementById('btnForgot').addEventListener('click', async()=>{
+        const email=document.getElementById('loginEmail').value.trim();
+        if(!email){showAuthError('Escribe tu correo primero');return;}
+        try{
+            await window._fb.sendPasswordResetEmail(fbAuth,email);
+            showAuthSuccess('📧 Revisa tu correo para restablecer la contraseña');
+        }catch(e){showAuthError(getAuthErrorMsg(e.code));}
+    });
 }
 
-async function loginUser(userId){
-    currentUser=userId;
-    document.getElementById('loginOverlay').classList.add('hidden');
-    document.getElementById('userBadge').classList.remove('hidden');
-    document.getElementById('syncIndicator').classList.remove('hidden');
-    const label=userId==='user1'?'👤 Usuario 1':'👤 Usuario 2';
-    document.getElementById('userBadgeLabel').textContent=label;
-    showToast('👋 Bienvenido, '+label.replace('👤 ',''));
-    // Cargar datos del usuario desde Firebase
-    await loadUserData();
-    // Suscribirse a cambios en tiempo real
-    subscribeToChanges();
-}
-
-function logoutUser(){
+async function logoutUser(){
     if(!confirm('¿Cerrar sesión?'))return;
-    currentUser=null;
-    if(unsubscribeSnapshot)unsubscribeSnapshot();
-    // Limpiar estado
-    state.income={};state.expenses={};state.budget={};state.planItems={};state.debts=[];state.diario={};
-    updateUI();
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    document.getElementById('userBadge').classList.add('hidden');
-    document.getElementById('syncIndicator').classList.add('hidden');
-    pinBuffer='';updatePinDots();
-    document.getElementById('pinError').textContent='';
-    const pins=getPins();
-    pinMode=pins[selectedUser]?'login':'create';
-    updatePinLabel();
+    try{
+        await window._fb.signOut(fbAuth);
+        state.income={};state.expenses={};state.budget={};state.planItems={};state.debts=[];state.diario={};
+        updateUI();
+        showToast('👋 Sesión cerrada');
+    }catch(e){showToast('Error al cerrar sesión');}
 }
 
 // ── FIREBASE SYNC ─────────────────────────────────────────────
@@ -1974,17 +1973,16 @@ function setSyncStatus(status){
     const lbl=document.getElementById('syncLabel');
     dot.className='sync-dot';
     if(status==='syncing'){dot.classList.add('syncing');lbl.textContent='Guardando...';}
-    else if(status==='ok'){dot.style.background='var(--green)';lbl.textContent='Sincronizado';}
+    else if(status==='ok'){lbl.textContent='Sincronizado';}
     else if(status==='error'){dot.classList.add('error');lbl.textContent='Sin conexión';}
-    else if(status==='offline'){dot.classList.add('error');lbl.textContent='Sin conexión';}
 }
 
 async function loadUserData(){
-    if(!fbDb||!currentUser){return;}
+    if(!fbDb||!currentUser)return;
     try{
         setSyncStatus('syncing');
-        const docRef=window._fbDoc(fbDb,'usuarios',currentUser);
-        const snap=await window._fbGet(docRef);
+        const docRef=window._fb.doc(fbDb,'usuarios',currentUser.uid);
+        const snap=await window._fb.getDoc(docRef);
         if(snap.exists()){
             const d=snap.data();
             state.income=d.income||{};
@@ -2001,7 +1999,6 @@ async function loadUserData(){
     }catch(e){
         console.error('Load error:',e);
         setSyncStatus('error');
-        // Fallback a localStorage
         loadState();updateUI();
     }
 }
@@ -2010,8 +2007,8 @@ async function saveToFirebase(){
     if(!fbDb||!currentUser){saveState();return;}
     try{
         setSyncStatus('syncing');
-        const docRef=window._fbDoc(fbDb,'usuarios',currentUser);
-        await window._fbSet(docRef,{
+        const docRef=window._fb.doc(fbDb,'usuarios',currentUser.uid);
+        await window._fb.setDoc(docRef,{
             income:state.income,
             expenses:state.expenses,
             budget:state.budget,
@@ -2019,24 +2016,25 @@ async function saveToFirebase(){
             debts:state.debts,
             diario:state.diario||{},
             usedCategories:state.usedCategories,
-            updatedAt:new Date().toISOString()
+            updatedAt:new Date().toISOString(),
+            displayName:currentUser.displayName||'',
+            email:currentUser.email||''
         });
-        saveState(); // también en localStorage como backup
+        saveState();
         setSyncStatus('ok');
     }catch(e){
         console.error('Save error:',e);
         setSyncStatus('error');
-        saveState(); // guardar local aunque falle Firebase
+        saveState();
     }
 }
 
 function subscribeToChanges(){
     if(!fbDb||!currentUser)return;
     if(unsubscribeSnapshot)unsubscribeSnapshot();
-    const docRef=window._fbDoc(fbDb,'usuarios',currentUser);
-    unsubscribeSnapshot=window._fbSnap(docRef,(snap)=>{
-        if(snap.exists()&&snap.metadata.hasPendingWrites===false){
-            // Solo actualizar si el cambio vino de otro dispositivo
+    const docRef=window._fb.doc(fbDb,'usuarios',currentUser.uid);
+    unsubscribeSnapshot=window._fb.onSnapshot(docRef,(snap)=>{
+        if(snap.exists()&&!snap.metadata.hasPendingWrites){
             const d=snap.data();
             const remoteUpdated=d.updatedAt||'';
             const localUpdated=state._lastSaved||'';
@@ -2056,14 +2054,11 @@ function subscribeToChanges(){
     });
 }
 
-// Override saveState para usar Firebase
-const _origSaveStateOld = typeof _origSave !== 'undefined' ? null : null;
-const _realSaveState = saveState;
+// Override saveState
 saveState = function(){
-    state._lastSaved = new Date().toISOString();
+    state._lastSaved=new Date().toISOString();
     if(syncTimeout)clearTimeout(syncTimeout);
-    syncTimeout=setTimeout(saveToFirebase, 800); // debounce 800ms
-    // Guardar localmente de inmediato
+    syncTimeout=setTimeout(saveToFirebase,800);
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify({income:state.income,expenses:state.expenses,budget:state.budget,usedCategories:state.usedCategories,planItems:state.planItems,debts:state.debts,diario:state.diario||{}}));}catch(e){}
 };
 
@@ -2075,9 +2070,26 @@ function init(){
     document.querySelectorAll('#qTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
     document.querySelectorAll('#planQTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
     updateUI();
-    // Firebase + Login
+    // Firebase + Auth
     initFirebase();
-    setupLoginUI();
+    setupAuthUI();
+}
+init();
+</script>
+</body>
+</html>
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+function init(){
+    loadState();updateDateDisplay();
+    if(!state.diario)state.diario={};
+    const q=getCurrentQ();state.currentQ=q;state.planCurrentQ=q;
+    document.querySelectorAll('#qTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
+    document.querySelectorAll('#planQTabs .q-tab').forEach(t=>t.classList.toggle('active',parseInt(t.dataset.q)===q));
+    updateUI();
+    // Firebase + Auth
+    initFirebase();
+    setupAuthUI();
 }
 init();
 </script>
